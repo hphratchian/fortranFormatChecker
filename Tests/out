@@ -1,0 +1,28 @@
+Processing source file prgm001.f90
+	File prgm001.f90 passed all tests.
+	DONE processing file...Number of lines = 3
+
+Processing source file prgm002.f90
+	File prgm002.f90 passed all tests.
+	DONE processing file...Number of lines = 4
+
+Processing source file prgm003.f90
+	File prgm003.f90 passed all tests.
+	DONE processing file...Number of lines = 8
+
+Processing source file prgm004.f90
+	File prgm004.f90 has 1 WARNINGS.
+	Line 6: Incorrect indentation/blocking.
+	DONE processing file...Number of lines = 8
+
+Processing source file prgm005.f90
+	File prgm005.f90 has 2 WARNINGS.
+	Line 14: Incorrect indentation/blocking.
+	Line 15: Incorrect indentation/blocking.
+	DONE processing file...Number of lines = 18
+
+Processing source file prgm006.f90
+	File prgm006.f90 passed all tests.
+	DONE processing file...Number of lines = 18
+
+All Done!

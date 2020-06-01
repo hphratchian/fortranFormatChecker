@@ -64,7 +64,7 @@
         $lineNumberCoded);
       my($DEBUG,$lineIndent,$trimmedLine,$incrementCurrent,$incrementNext,
         @warningListTemp,@warningList,$nWarnings,$temp);
-      $DEBUG = 0;
+      $DEBUG = $rules{'debug'};
       chomp($filename);
 #
 #     Tell the user what's going on here...
@@ -73,7 +73,7 @@
 #
 #     Grab a few key rules from the rules hash table.
 #
-      $currentLineIndent = $rules{"standardlineindent"};
+      $currentLineIndent = $rules{'standardlineindent'};
 #
 #
 #     Open the source code file and then begin processing it.
@@ -84,7 +84,7 @@
         $currentLine = $_;
         chomp($currentLine);
         $lineNumberActual += 1;
-        ($lineIndent,$trimmedLine) = &remove_lineNumberSpace($currentLine);
+        ($lineIndent,$trimmedLine) = &remove_lineNumberSpace($currentLine,%rules);
         if($DEBUG){
           print "\n--->$currentLine<---\n--->$trimmedLine<---\nIndent = $lineIndent\n\n";
         }
@@ -130,6 +130,9 @@
 #     ----------------------------------------------------------------
 #     Rule                      Comment
 #     ----------------------------------------------------------------
+#     debug                     This is TRUE of FALSE to turn on or off
+#                               debug printing.
+#
 #     standardLineIndent        This is the number of columns a
 #                               standard line should be indented.
 #
@@ -163,6 +166,7 @@
 #     ----------------------------------------------------------------
 #     Rule                      Default Value
 #     ----------------------------------------------------------------
+#     debug                     FALSE (0)
 #     standardLineIndent        6
 #     indent                    2
 #     endDoWithBlock            FALSE (0)
@@ -178,16 +182,17 @@
 #
 #     Hardwire the general rules in the hash.
 #
-      $rules{standardlineindent} = 6;
-      $rules{indent}             = 2;
-      $rules{endifwithblock}     = 0;
-      $rules{enddowithblock}     = 0;
-      $rules{continuewithblock}  = 0;
+      $rules{'debug'}              = 0;
+      $rules{'standardlineindent'} = 6;
+      $rules{'indent'}             = 2;
+      $rules{'endifwithblock'}     = 0;
+      $rules{'enddowithblock'}     = 0;
+      $rules{'continuewithblock'}  = 0;
 #
 #     Copy the general indentation amount to the different blocks.
 #
-      unless($rules{indentdo}){$rules{indentdo} = $rules{indent}};
-      unless($rules{indentif}){$rules{indentif} = $rules{indent}};
+      unless($rules{'indentdo'}){$rules{'indentdo'} = $rules{'indent'}};
+      unless($rules{'indentif'}){$rules{'indentif'} = $rules{'indent'}};
 #
       return %rules;
     }
@@ -212,8 +217,8 @@
 #
 #     Determine the line type of the line being read. Hardwire the rules hash.
 #
-      $rules{standardlineindent} = 7;
-      $rules{indent}             = 2;
+      $rules{'standardlineindent'} = 7;
+      $rules{'indent'}             = 2;
 #
       return %rules;
     }
@@ -237,25 +242,45 @@
       my($lineNumber,$line,%rules) = @_;
       my($incrementCurrent,$incrementNext,@warningList);
       my($DEBUG);
-      $DEBUG = 0;
+      $DEBUG = $rules{'debug'};
 #
 #     Look at the line sent in to determine if it's a special kind of line.
 #     If so, check the rules to determine indentation increments for this
 #     line and the next one.
 #
       if($DEBUG){print "\n\n\t\tInside incrementForLine: line = $line.\n"}
-      if($line =~ /^(do .*||do)$/i){
+      if($line =~ /^(do .*|do)$/i){
         if($DEBUG){print "\tFound DO line.\n"};
         $incrementCurrent = 0;
-        $incrementNext    = $rules{indentdo};
+        $incrementNext    = $rules{'indentdo'};
       }elsif($line =~ /^enddo *$/i){
         if($DEBUG){print "\tFound ENDDO line.\n"};
-        if($rules{enddowithblock}){
+        if($rules{'enddowithblock'}){
           $incrementCurrent = 0;
         }else{
-          $incrementCurrent = -$rules{indentdo};
+          $incrementCurrent = -$rules{'indentdo'};
         }
-        $incrementNext = -$rules{indentdo};
+        $incrementNext = -$rules{'indentdo'};
+      }elsif($line =~ /^if.*then\s*$/i){
+        if($DEBUG){print "\tFound IF...THEN line.\n"};
+        $incrementCurrent = 0;
+        $incrementNext    = $rules{'indentif'};
+      }elsif($line =~ /^(elseif|else if).*\s*$/i){
+        if($DEBUG){print "\tFound ELSEIF line.\n\tline:$line\n"};
+        $incrementCurrent = -$rules{'indentif'};
+        $incrementNext    = 0;
+      }elsif($line =~ /^else.*\s*$/i){
+        if($DEBUG){print "\tFound ELSE line.\n\tline:$line\n"};
+        $incrementCurrent = -$rules{'indentif'};
+        $incrementNext    = 0;
+      }elsif($line =~ /^(endif|end if).*\s*$/i){
+        if($DEBUG){print "\tFound ENDIF line.\n"};
+        if($rules{'endifwithblock'}){
+          $incrementCurrent = 0;
+        }else{
+          $incrementCurrent = -$rules{'indentif'};
+        }
+        $incrementNext = -$rules{'indentif'};
       }else{
         if($DEBUG){print "\tFound nominal line.\n"};
         $incrementCurrent = 0;
@@ -273,17 +298,18 @@
 #
 #     This routine removes a line numbers and leading spaces from a line of code.
 #
-#     There is one INPUT arguments: the line to be processed.
+#     There are two INPUT arguments: (1) the line to be processed; and (2)
+#     the rules hash.
 #
 #     There is one OUTPUT arguments: the processed line with leading spaces
 #     and line numbers removed.
 #
 #
       use strict;
-      my($line) = @_;
+      my($line,%rules) = @_;
       my($leadingSpaces,$lineNumber);
       my($DEBUG,$lineIndent,$trimmedLine);
-      $DEBUG = 0;
+      $DEBUG = $rules{'debug'};
 #
 #     Remove leading spaces and line numbers from the line sent.
 #
