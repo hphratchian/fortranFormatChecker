@@ -82,10 +82,20 @@
 #
       open SRCFILE,"$filename";
       $lineNumberActual = 0;
+      $inContinuation = 0;
       while(<SRCFILE>){
         $currentLine = $_;
         chomp($currentLine);
         $lineNumberActual += 1;
+#
+        unless($rules{blanklineallowed}){
+          if($currentLine =~ /^\s*$/){
+            push(@warningList,"Line $lineNumberActual: Found a BLANK LINE.");
+          }
+        }
+        if($currentLine =~ /\s+$/){
+          push(@warningList,"Line $lineNumberActual: Found a TRAILING BLANKS.");
+        }
         ($commentLine,$trimmedLine) = &isCommentLine($currentLine,%rules);
         unless($commentLine){($lineIndent,$trimmedLine) =
           &remove_lineNumberSpace($trimmedLine,%rules)};
@@ -96,13 +106,13 @@
         unless($commentLine){
           ($inContinuation,$nextContinuation,$incrementCurrent,$incrementNext,$trimmedLine) = 
             &continuationLineCheck($inContinuation,$trimmedLine,$currentLine,%rules);
-          unless($inContinuation){
             ($incrementCurrent,$incrementNext,@warningListTemp) = 
-              &incrementForLine($lineNumberActual,$trimmedLine,%rules);
+              &incrementForLine($lineNumberActual,$trimmedLine,$inContinuation,
+              $incrementCurrent,$incrementNext,%rules);
             push(@warningList,@warningListTemp);
-          }
           if(($lineIndent-$currentLineIndent) ne $incrementCurrent){
             push(@warningList,"Line $lineNumberActual: Incorrect indentation/blocking.");
+            $currentLineIndent = $lineIndent;
           }
           $currentLineIndent += $incrementNext;
           $inContinuation = $nextContinuation;
@@ -144,6 +154,9 @@
 #     ----------------------------------------------------------------
 #     debug                     This is TRUE of FALSE to turn on or off
 #                               debug printing.
+#
+#     blankLineAllowed          This is TRUE of FALSE to indicate whether
+#                               blank lines are allowed.
 #
 #     standardLineIndent        This is the number of columns a
 #                               standard line should be indented.
@@ -187,6 +200,7 @@
 #     Rule                      Default Value
 #     ----------------------------------------------------------------
 #     debug                     FALSE (0)
+#     blankLineAllowed          FALSE (0)
 #     standardLineIndent        6
 #     indent                    2
 #     continuationIndent        2
@@ -205,6 +219,7 @@
 #     Hardwire the general rules in the hash.
 #
       $rules{'debug'}              = 0;
+      $rules{'blanklineallowed'}   = 0;
       $rules{'standardlineindent'} = 6;
       $rules{'indent'}             = 2;
       $rules{'continuationIndent'} = 2;
@@ -253,8 +268,11 @@
 #     current line and the next line wrt the previous line's increment.
 #
 #     There are two INPUT arguments: (1) the current line number in the
-#     source code file; and (2)the current line after being trimmed by
-#     Routine remove_lineNumberSpace.
+#     source code file; (2) the current line after being trimmed by Routine
+#     remove_lineNumberSpace; (3) the $inContinuation flag; (4) the number
+#     of spaces already determined for the current line to be incremented;
+#     (5) the number of spaces already determined for the next line to be
+#     incremented; and (6) the hash of rules.
 #
 #     There are three OUTPUT arguments: (1) the number of spaces the current
 #     line should be incremented; (2) the number of spaces the next
@@ -263,8 +281,9 @@
 #
 #
       use strict;
-      my($lineNumber,$line,%rules) = @_;
-      my($incrementCurrent,$incrementNext,@warningList);
+      my($lineNumber,$line,$inContinuation,$incrementCurrent,$incrementNext,
+        %rules) = @_;
+      my(@warningList);
       my($DEBUG);
       $DEBUG = $rules{'debug'};
 #
@@ -297,6 +316,10 @@
         if($DEBUG){print "\tFound IF...THEN line.\n"};
         $incrementCurrent = 0;
         $incrementNext    = $rules{'indentif'};
+      }elsif($inContinuation && $line =~ /.*then\s*$/i){
+        if($DEBUG){print "\tFound IF...THEN continuation line.\n"};
+        $incrementCurrent = 2;
+        $incrementNext    = $rules{'indentif'};
       }elsif($line =~ /^(elseif|else if).*\s*$/i){
         if($DEBUG){print "\tFound ELSEIF line.\n\tline:$line\n"};
         $incrementCurrent = -$rules{'indentif'};
@@ -313,7 +336,7 @@
           $incrementCurrent = -$rules{'indentif'};
         }
         $incrementNext = -$rules{'indentif'};
-      }else{
+      }elsif(! $inContinuation){
         if($DEBUG){print "\tFound nominal line.\n"};
         $incrementCurrent = 0;
         $incrementNext    = 0;
