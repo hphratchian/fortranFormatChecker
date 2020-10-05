@@ -62,8 +62,10 @@
       my($filename,%rules) = @_;
       my($currentLine,$currentLineIndent,$lineIndent,$lineNumberActual,  
         $lineNumberCoded);
-      my($DEBUG,$lineIndent,$trimmedLine,$incrementCurrent,$incrementNext,
-        @warningListTemp,@warningList,$nWarnings,$temp);
+      my($DEBUG,$lineIndent,$commentLine,$trimmedLine,$inContinuation,
+        $nextContinuation,$incrementCurrent,$incrementNext,@warningListTemp,
+        @warningList,$nWarnings,$temp);
+#
       $DEBUG = $rules{'debug'};
       chomp($filename);
 #
@@ -84,17 +86,27 @@
         $currentLine = $_;
         chomp($currentLine);
         $lineNumberActual += 1;
-        ($lineIndent,$trimmedLine) = &remove_lineNumberSpace($currentLine,%rules);
+        ($commentLine,$trimmedLine) = &isCommentLine($currentLine,%rules);
+        unless($commentLine){($lineIndent,$trimmedLine) =
+          &remove_lineNumberSpace($trimmedLine,%rules)};
         if($DEBUG){
+          if($commentLine){print"\nCOMMENT LINE FOUND:"};
           print "\n--->$currentLine<---\n--->$trimmedLine<---\nIndent = $lineIndent\n\n";
         }
-        ($incrementCurrent,$incrementNext,@warningListTemp) = 
-          &incrementForLine($lineNumberActual,$trimmedLine,%rules);
-        push(@warningList,@warningListTemp);
-        if(($lineIndent-$currentLineIndent) ne $incrementCurrent){
-          push(@warningList,"Line $lineNumberActual: Incorrect indentation/blocking.");
+        unless($commentLine){
+          ($inContinuation,$nextContinuation,$incrementCurrent,$incrementNext,$trimmedLine) = 
+            &continuationLineCheck($inContinuation,$trimmedLine,$currentLine,%rules);
+          unless($inContinuation){
+            ($incrementCurrent,$incrementNext,@warningListTemp) = 
+              &incrementForLine($lineNumberActual,$trimmedLine,%rules);
+            push(@warningList,@warningListTemp);
+          }
+          if(($lineIndent-$currentLineIndent) ne $incrementCurrent){
+            push(@warningList,"Line $lineNumberActual: Incorrect indentation/blocking.");
+          }
+          $currentLineIndent += $incrementNext;
+          $inContinuation = $nextContinuation;
         }
-        $currentLineIndent += $incrementNext;
       }
       close SRCFILE,"$filename";
 #
@@ -139,6 +151,14 @@
 #     indent                    This is the number of spaces to indent
 #                               code blocks when appropriate.
 #
+#     continuationIndent        This is the number of spaces to indent
+#                               code that is part of a continuation block.
+#
+#     isF77                     This is TRUE of FALSE to indicate whether
+#                               FORTRAN 77 rules should be followed for
+#                               determining comment lines, continuation
+#                               markers, and max length of code lines.
+#
 #     endDoWithBlock            This is TRUE or FALSE to indicate whether
 #                               an endDo statement should block with the
 #                               code above it or move back. In either case,
@@ -169,6 +189,8 @@
 #     debug                     FALSE (0)
 #     standardLineIndent        6
 #     indent                    2
+#     continuationIndent        2
+#     isF77                     FALSE (0)
 #     endDoWithBlock            FALSE (0)
 #     endIfWithBlock            FALSE (0)
 #     continueWithBlock         FALSE (0)
@@ -185,9 +207,11 @@
       $rules{'debug'}              = 0;
       $rules{'standardlineindent'} = 6;
       $rules{'indent'}             = 2;
-      $rules{'endifwithblock'}     = 0;
+      $rules{'continuationIndent'} = 2;
+      $rules{'isF77'}              = 1;
+      $rules{'endifwithblock'}     = 1;
       $rules{'enddowithblock'}     = 0;
-      $rules{'continuewithblock'}  = 0;
+      $rules{'continuewithblock'}  = 1;
 #
 #     Copy the general indentation amount to the different blocks.
 #
@@ -225,7 +249,7 @@
 
     sub incrementForLine{
 #
-#     This routine determines the increment that should expected for the
+#     This routine determines the increment that should be expected for the
 #     current line and the next line wrt the previous line's increment.
 #
 #     There are two INPUT arguments: (1) the current line number in the
@@ -256,6 +280,14 @@
       }elsif($line =~ /^enddo *$/i){
         if($DEBUG){print "\tFound ENDDO line.\n"};
         if($rules{'enddowithblock'}){
+          $incrementCurrent = 0;
+        }else{
+          $incrementCurrent = -$rules{'indentdo'};
+        }
+        $incrementNext = -$rules{'indentdo'};
+      }elsif($line =~ /^continue$/i){
+        if($DEBUG){print "\tFound CONTINUE line.\n"};
+        if($rules{'continuewithblock'}){
           $incrementCurrent = 0;
         }else{
           $incrementCurrent = -$rules{'indentdo'};
@@ -296,13 +328,13 @@
 
     sub remove_lineNumberSpace{
 #
-#     This routine removes a line numbers and leading spaces from a line of code.
+#     This routine removes line numbers and leading spaces from a line of code.
 #
 #     There are two INPUT arguments: (1) the line to be processed; and (2)
 #     the rules hash.
 #
-#     There is one OUTPUT arguments: the processed line with leading spaces
-#     and line numbers removed.
+#     There is one OUTPUT argument: (1) the line's indentation; and (2) the
+#     processed line with leading spaces and line numbers removed.
 #
 #
       use strict;
@@ -313,7 +345,7 @@
 #
 #     Remove leading spaces and line numbers from the line sent.
 #
-      if($DEBUG){print "\n\n\t\tInside remove_lineNumbreSpace: line = $line.\n"}
+      if($DEBUG){print "\n\n\t\tInside remove_lineNumberSpace: line = $line.\n"}
       if($line =~ /^([\s\d]+)([a-zA-Z].*)\s*$/){
         if($DEBUG){print "MATCH 1\n"};
         $leadingSpaces = $1;
@@ -326,11 +358,107 @@
         $leadingSpaces = $1;
         $trimmedLine = $2;
         $lineIndent = length($leadingSpaces);
-      }else{
+      }elsif($line =~ /^(     \$\s*)(\S.*)\s*$/){
         if($DEBUG){print "MATCH 3\n"};
+        $leadingSpaces = $1;
+        $trimmedLine = $2;
+        $lineIndent = length($leadingSpaces);
+      }else{
+        if($DEBUG){print "MATCH 4\n"};
+        print "\nCurrent Link: -->$line<--\n";
+        die "\n\nFAIL!!!\n\n";
         $trimmedLine = " ";
         $lineIndent = -1;
       }
 #
       return ($lineIndent,$trimmedLine);
+    }
+
+    sub isCommentLine{
+#
+#     This routine checks to see if this is a comment line.
+#
+#     There are two OUTPUT arguments: (1) a 1 if the whole line is a
+#     comment and 0 if it is not; and (2) the line without any trailing
+#     comment section.
+#
+#
+      use strict;
+      my($line,%rules) = @_;
+      my($isCommentLine);
+      my($DEBUG,$isF77,$trimmedLine);
+      $DEBUG = $rules{'debug'};
+      $isF77 = $rules{'isF77'};
+      $trimmedLine = $line;
+#
+#     Check to see if the full line is a comment.
+#
+      $isCommentLine = 0;
+      if($isF77){
+        unless($line =~ /^\s/){
+          $isCommentLine = 1;
+        }
+      }else{
+        if($line =~ /^\s*!/){
+          $isCommentLine = 1;
+        }elsif($line =~ /^(.+)!.*/){
+          $trimmedLine = $1;
+        }
+      }
+#
+      return ($isCommentLine,$trimmedLine);
+    }
+
+    sub continuationLineCheck{
+#
+#     This routine checks to see if the current line is a continuation
+#     line. If so, the output variable $inContinuation is returned TRUE.
+#     Increment values for the current line and for the next line are also
+#     set and returned.
+#
+#     There are three INPUT arguments: (1) $inContinuation; (2)
+#     $trimmedLine; (3) $fullLine; and (4) %rules.
+#
+#     There are three OUTPUT arguments: (1) $inContinuation; (2)
+#     $nextContinuation; (3) $incrementCurrent; (4) $incrementNext, and (5)
+#     $trimmedLine.
+#
+#
+      use strict;
+      my($inContinuation,$trimmedLine,$fullLine,%rules) = @_;
+      my($nextContinuation,$incrementCurrent,$incrementNext);
+      my($DEBUG);
+      $DEBUG = $rules{'debug'};
+#
+#     Look at the line sent in to determine if it's a special kind of line.
+#     If so, check the rules to determine indentation increments for this
+#     line and the next one.
+#
+      if($DEBUG){print "\n\n\t\tInside continuationLineCheck: line = $fullLine.\n"}
+      if($rules{'isF77'}){
+        if($fullLine =~ /^     \$/){
+          if($DEBUG){print "\tFound CONTINUATION line.\n"};
+          $trimmedLine =~ s/^\s*\$\s*//;
+          $incrementCurrent = $rules{'continuationIndent'};
+          $incrementNext    = 0;
+          $inContinuation   = 1;
+          $nextContinuation = 0;
+        }else{
+          $incrementCurrent = 0;
+          $incrementNext    = 0;
+          $inContinuation   = 0;
+          $nextContinuation = 0;
+        }
+      }else{
+        $incrementCurrent = 0;
+        $incrementNext    = 0;
+        $inContinuation   = 0;
+        $nextContinuation = 0;
+      }
+#
+      if($DEBUG){
+        print "\t\tincrementCurrent = $incrementCurrent\n";
+        print "\t\tincrementNext    = $incrementNext\n";
+      }
+      return($inContinuation,$nextContinuation,$incrementCurrent,$incrementNext,$trimmedLine);
     }
