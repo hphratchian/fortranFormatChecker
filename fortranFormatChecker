@@ -25,13 +25,23 @@
 #
     foreach(@ARGV){
       chomp($_);
-      if(/^-(.*)/){
+      if(/^-rulesfile=(.+)$/i){
+        push(@rulesFiles,$1);
+      }elsif(/^-(.*)/){
         die "Unknown argument sent to fortranBlocking: $1\n\n";
       }else {
         push(@srcFiles,$_);
       }
     }
+#
+#   Load the rules hash with default values. Then, process any option files
+#   provided by the user on the command line.
+#
     %rules = &set_rules();
+    foreach $temp (@rulesFiles){
+      print "rules file: $temp\n";
+      %rules = &process_rules_file($temp,%rules);
+    }
 #
 #   Go through the source code files, one by one.
 #
@@ -222,11 +232,11 @@
       $rules{'blanklineallowed'}   = 0;
       $rules{'standardlineindent'} = 6;
       $rules{'indent'}             = 2;
-      $rules{'continuationIndent'} = 2;
-      $rules{'isF77'}              = 1;
-      $rules{'endifwithblock'}     = 1;
+      $rules{'continuationindent'} = 2;
+      $rules{'isf77'}              = 0;
+      $rules{'endifwithblock'}     = 0;
       $rules{'enddowithblock'}     = 0;
-      $rules{'continuewithblock'}  = 1;
+      $rules{'continuewithblock'}  = 0;
 #
 #     Copy the general indentation amount to the different blocks.
 #
@@ -409,15 +419,15 @@
       use strict;
       my($line,%rules) = @_;
       my($isCommentLine);
-      my($DEBUG,$isF77,$trimmedLine);
+      my($DEBUG,$isf77,$trimmedLine);
       $DEBUG = $rules{'debug'};
-      $isF77 = $rules{'isF77'};
+      $isf77 = $rules{'isf77'};
       $trimmedLine = $line;
 #
 #     Check to see if the full line is a comment.
 #
       $isCommentLine = 0;
-      if($isF77){
+      if($isf77){
         unless($line =~ /^\s/){
           $isCommentLine = 1;
         }
@@ -458,11 +468,11 @@
 #     line and the next one.
 #
       if($DEBUG){print "\n\n\t\tInside continuationLineCheck: line = $fullLine.\n"}
-      if($rules{'isF77'}){
+      if($rules{'isf77'}){
         if($fullLine =~ /^     \$/){
           if($DEBUG){print "\tFound CONTINUATION line.\n"};
           $trimmedLine =~ s/^\s*\$\s*//;
-          $incrementCurrent = $rules{'continuationIndent'};
+          $incrementCurrent = $rules{'continuationindent'};
           $incrementNext    = 0;
           $inContinuation   = 1;
           $nextContinuation = 0;
@@ -484,4 +494,71 @@
         print "\t\tincrementNext    = $incrementNext\n";
       }
       return($inContinuation,$nextContinuation,$incrementCurrent,$incrementNext,$trimmedLine);
+    }
+
+    sub user_set_rule{
+#
+#     This routine sets a processing rule to a user-defined value. The
+#     routine set_rules must be called before this routine. This routine
+#     relies on the rules hash being filled with all valid rule keys before
+#     attempting to set a user-defined value.
+#
+#     There are three INPUT arguments: (1) string with the rule name; (2)
+#     the value the rule should be set to; and (3) the rules hash.
+#
+#     There is one OUTPUT argument: the updated rules hash.
+#
+#
+      use strict;
+      my($ruleName,$ruleValue,%rules) = @_;
+      my($myRuleName);
+#
+#     Make sure the string in $ruleName matches a key in the rules hash.
+#     Then, update the rules hash as requested.
+#
+      $myRuleName = lc $ruleName;
+      chomp($myRuleName);
+      print "myRuleName: -->$myRuleName<--\n";
+      $myRuleName =~ s/ //g;
+      if(! defined($rules{$myRuleName})){
+        die "\n\nUser-requested rule $ruleName not allowed!\n\n";
+      }
+      print "Over-riding rule $myRuleName with value $ruleValue\n";
+      $rules{$myRuleName} = $ruleValue;
+#
+      return %rules;
+    }
+
+    sub process_rules_file{
+#
+#     This routine processes a rules file.
+#
+#     There are two INPUT arguments: (1) string with the rule file name;
+#     and (2) the rules hash.
+#
+#     There is one OUTPUT argument: the updated rules hash.
+#
+#
+      use strict;
+      my($rulesFile,%rules) = @_;
+      my($ruleName,$ruleValue);
+#
+#     Open the provided rules file and process the entries to update the
+#     rules hash.
+#
+      open RULESFILE, "< $rulesFile";
+      while(<RULESFILE>){
+        chomp;
+        if(/^(.+)=(.+)$/){
+          $ruleName = $1;
+          $ruleValue = $2;
+        }else{
+          die "\n\nInvalid rules line in file $rulesFile.\n\tLINE:-->$_<--\n\n";
+        }
+        chomp($ruleName);
+        chomp($ruleValue);
+        %rules = &user_set_rule($ruleName,$ruleValue,%rules);
+      }
+#
+      return %rules;
     }
