@@ -1,0 +1,11 @@
+endifwithblock=1
+indentif=2
+blanklineallowed=0
+standardlineindent=6
+indent=2
+continuewithblock=1
+indentdo=2
+enddowithblock=0
+isF77=1
+debug=0
+continuationIndent=2
