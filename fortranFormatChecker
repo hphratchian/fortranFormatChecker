@@ -518,12 +518,10 @@
 #
       $myRuleName = lc $ruleName;
       chomp($myRuleName);
-      print "myRuleName: -->$myRuleName<--\n";
       $myRuleName =~ s/ //g;
       if(! defined($rules{$myRuleName})){
         die "\n\nUser-requested rule $ruleName not allowed!\n\n";
       }
-      print "Over-riding rule $myRuleName with value $ruleValue\n";
       $rules{$myRuleName} = $ruleValue;
 #
       return %rules;
