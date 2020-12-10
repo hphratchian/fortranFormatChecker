@@ -104,7 +104,7 @@
           }
         }
         if($currentLine =~ /\s+$/){
-          push(@warningList,"Line $lineNumberActual: Found a TRAILING BLANKS.");
+          push(@warningList,"Line $lineNumberActual: Found TRAILING BLANKS.");
         }
         ($commentLine,$trimmedLine) = &isCommentLine($currentLine,%rules);
         unless($commentLine){($lineIndent,$trimmedLine) =
@@ -396,9 +396,14 @@
         $leadingSpaces = $1;
         $trimmedLine = $2;
         $lineIndent = length($leadingSpaces);
-      }else{
+      }elsif($line =~ /^\s*$/){
         if($DEBUG){print "MATCH 4\n"};
-        print "\nCurrent Link: -->$line<--\n";
+        $leadingSpaces = 0;
+        $trimmedLine = $line;
+        $lineIndent = 0;
+      }else{
+        if($DEBUG){print "MATCH 5\n"};
+        print "\nCurrent Line: -->$line<--\n";
         die "\n\nFAIL!!!\n\n";
         $trimmedLine = " ";
         $lineIndent = -1;
